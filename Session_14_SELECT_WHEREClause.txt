@@ -1,0 +1,153 @@
+Session - 14
+---------------
+Understanding WHERE
+---------------------
+
+WHERE clause : is used to filter the records based on a condition
+: is logically proccessed after FROM clause
+
+WHERE <condition>
+
+LSEXPR <RO> RSEXPR
+
+SQL Server has different relational operators
+	= , >, >=, < , <=, <> and also != for not equals 
+
+	a. IS NULL : used to compare with NULL values ( the negation is IS NOT NULL )
+	b. IN : is used to compare with the list of values
+			should be enclosed in parenthesis ( NOT IN )
+	c. BETWEEN .. AND .. : is used to compare with the range of values
+
+		BETWEEN <LBV> AND <UBV>
+	d. LIKE :
+
+	
+
+the condition will be checked for every row in the source
+condition returns there possible values
+	1. TRUE
+	2. FALSE
+	3. UNKNOWN
+for whichever the condition returns TRUE, that rows will displayed in the output
+FALSE and UNKNOWN will be rejected
+-- dispolay the employees who are working in dept 10
+
+SELECT *
+FROM Employee
+WHERE DeptId = 10
+
+10 = 10 --> TRUE : Display
+20 = 10 --> FALSE : Rejected
+20 = 10 --> FALSE : Rejected
+10 = 10 --> TRUE : Display
+NULL = 10 --> UNKNOWN : Rejected
+10 = 10 --> TRUE : Display
+
+UPDATE Employee SET DeptId =  NULL WHERE Empid = 5
+
+LSEXPR <RO> RSEXPR
+		
+		colName/ constant / salary * 12
+
+DeptId = 10
+10 = 10
+salary = commission
+
+salary * 12 = 1000
+
+
+SELECT *
+FROM Employee
+WHERE 10 = 10
+
+
+---------  DB Script --------
+
+SELECT * 
+FROM Employee
+
+-- display all the employee whose salary is more than 4000
+SELECT *
+FROM Employee
+WHERE Salary > 4000
+
+
+
+SELECT *
+FROM Employee
+WHERE 4000 = 4000
+
+
+SELECT *
+FROM Employee
+WHERE 1 = 1
+
+
+-- display the employee who are working as SE
+SELECT *
+FROM Employee
+WHERE Empdesignation = 'SE'
+
+UPDATE Employee SET DeptId = 30 WHERE EmpId = 6
+
+-- Display all the employees who work for departnents other than 10
+
+SELECT *
+FROM Employee
+WHERE DeptId <> 10 -- Standarad SQL -- best practice
+--WHERE DeptId != 10 -- Sql server specific
+
+INSERT INTO Employee Values(7,'Hari','SE',4500,Getdate(),NULL);
+
+-- display the employee whose deptid is NULL
+SELECT *
+FROM Employee
+WHERE DeptId = NULL --- Empty rows ( surprising result )
+
+
+IS NULL operator : used to compare with NULL values
+
+SELECT *
+FROM Employee
+WHERE DeptId IS NULL
+
+
+-- displayees who are assigned with some departments
+
+SELECT *
+FROM Employee
+WHERE DeptId IS NOT NULL 
+
+
+-- Display the employees whose salary is 5000,1200,7000
+SELECT *
+FROM Employee
+WHERE Salary = 5000,1200,7000
+
+
+SELECT *
+FROM Employee
+WHERE Salary IN (5000,1200,7000)
+
+
+SELECT *
+FROM Employee
+WHERE Salary NOT IN (5000,1200,7000)
+
+-- display all the employees who salary is between 1000 to 5000
+SELECT *
+FROM Employee
+WHERE salary Between 1000 AND 5000 -- ( the values are inclusive )
+
+
+SELECT *
+FROM Employee
+WHERE salary Between 5000 AND 1000
+
+SELECT *
+FROM Employee
+WHERE salary NOT Between 1000 AND 5000
+
+
+
+
