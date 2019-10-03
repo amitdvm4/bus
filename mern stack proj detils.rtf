@@ -1,0 +1,1016 @@
+{\rtf1\ansi\deff0\nouicompat{\fonttbl{\f0\fnil\fcharset0 Calibri;}{\f1\fnil Calibri;}{\f2\fnil\fcharset1 Segoe UI Symbol;}{\f3\fnil\fcharset1 Segoe UI Symbol;}}
+{\colortbl ;\red0\green0\blue255;}
+{\*\generator Riched20 6.3.9600}\viewkind4\uc1 
+\pard\sa200\sl276\slmult1\f0\fs22\lang9 Build a Banking Web App with Plaid & the MERN Stack\par
+Using Mongo, Express, React and Node with Plaid\rquote s API, the technology layer of FinTech\par
+Rishi Prasad\par
+Rishi Prasad\par
+Follow\par
+Jan 3 \'b7 18 min read\par
+\par
+Source: plaid.com\par
+Introduction to Plaid\par
+\par
+How Plaid Works\par
+If you\rquote ve ever connected your bank account to an application, you\rquote ve likely used Plaid. Plaid\rquote s customers include American Express, Venmo, Coinbase, Robinhood, Citi, and many more large financial institutions/FinTechs. Plaid\rquote s customers use the service for a variety of use cases, such as collecting transaction data, validating a user\rquote s identity, executing ACH payments, checking employment and income data, and more.\par
+Plaid has wonderful documentation for developers on how to integrate with their service. However, I couldn\rquote t find any posts or videos that walked through building a full application (e.g. with databases, servers, authentication, UI frameworks) with Plaid. As someone who is deeply interested in financial technology, I thought I\rquote d try my hand with Plaid and write about it.\par
+What We\rquote ll Build\par
+\par
+Finished product\par
+Full code base can be viewed here.\par
+rishipr/mern-plaid\par
+Full-stack banking web app built with Plaid's API and the MERN stack - rishipr/mern-plaid\par
+github.com\par
+We\rquote ll be building a personal banking web app using the following technologies.\par
+MongoDB for our database\par
+Express & Node for our backend\par
+React for our frontend\par
+Redux for state management\par
+Plaid for allowing users to link their bank accounts\par
+The app will allow users to\par
+Link multiple bank accounts\par
+Remove bank accounts\par
+View transactions from all linked accounts in a searchable and filterable data table\par
+We\rquote ll be cloning my mern-auth repo as a starting point. If you want to build this project fully from scratch, then you should read my recent series where I build the mern-auth project.\par
+Build a Login/Auth App with the MERN Stack \f1\emdash  Part 1 (Backend)\par
+Build a Login/Auth App with the MERN Stack \emdash  Part 2 (Frontend & Redux Setup)\par
+Build a Login/Auth App with the MERN Stack \emdash  Part 3 (Linking Redux with React Components)\par
+Should you want to simply add a Plaid integration to your existing project, this post should still help you achieve that.\par
+\par
+Plaid API Overview\par
+We\rquote ll be using Plaid to allow users to link their accounts and to gain access to their transactional data. The Plaid API glossary is particularly useful for understanding the different terms that I\rquote ll be referencing throughout this post.\par
+Our Plaid flow will go as follows.\par
+User links a bank account within app, causing our app\rquote s public key to be sent to Plaid\par
+Plaid responds with a public token, which is unique for each sign in and expires in 30 minutes\par
+We send our public token to our back-end server, exchanging it for an access token and item id (each bank account has a unique access token and item id)\par
+We\rquote ll save this access token, item id and a few other fields in our database (while checking for duplicate accounts)\par
+We\rquote ll send our access token, client id, and client secret to Plaid to get the user\rquote s transactions\par
+Further Reading\par
+As mentioned, Plaid has really excellent documentation. I would highly recommend reading through their official docs and Node client library for further reference.\par
+Official Docs\par
+NodeJS Client Library\par
+Getting Started\par
+I. Install the React and Redux Chrome Extensions\par
+II. Clone the mern-auth repo\par
+1. Clone the repo and name your new project\par
+\f2\lang1033\u10140?\f0   ~ git clone {{\field{\*\fldinst{HYPERLINK https://github.com/rishipr/mern-auth.git }}{\fldrslt{https://github.com/rishipr/mern-auth.git\ul0\cf0}}}}\f0\fs22  mern-plaid\par
+\f2\u10140?\f0   ~ cd mern-plaid\par
+\f2\u10140?\f0   mern-plaid git:(master) rm -rf .git\par
+Out of the box, we\rquote ll have a MERN app with authentication and routing all set up.\par
+2. Install mern-auth server and client dependencies\par
+Navigate to your project directory and run the following.\par
+\f2\u10140?\f0   mern-plaid npm install && npm run client-install\par
+If you run npm run dev, the client should open in localhost:3000 and should look like the below. This will be the starting point for our banking app.\par
+\par
+Mongo will throw a MongoParseError: Invalid connection string error since we haven\rquote t created or linked our database yet, but we\rquote ll fix that shortly.\par
+3. Install project-specific dependencies\par
+We have some additional dependencies to install for this specific app.\par
+Server\par
+\f2\u10140?\f0   mern-plaid npm i moment plaid\par
+On the server, we\rquote ll be using the moment library (for defining time frames when fetching bank transactions) and, of course, plaid.\par
+Client\par
+\f2\u10140?\f0   mern-plaid cd client\par
+\f2\u10140?\f0   client npm i react-plaid-link-button material-table prop-types\par
+On the client, we\rquote ll be using react-plaid-link-button (drop-in implementation of Plaid Link built for React), material-table (for displaying transactional data in a searchable and paginated table) and prop-types (runtime type checking for React props).\par
+III. Set up your MongoDB database\par
+1. Head over to mLab and create an account if you don\rquote t have one already\par
+2. Create a new MongoDB Deployment on mLab\par
+Select AWS as your cloud provider and Sandbox as your plan type. Then set your AWS region based on where you live. Finally, name your database and submit your order\f1\emdash it\rquote s free.\par
+3. Head over to your mLab dashboard and click on your newly created database\par
+Navigate to the Users tab, click Add Database User, and create a database user. Your database needs at least one user in order to use it.\par
+Find your MongoDB URI (should look like the one below). We will use this to connect to our database.\par
+mongodb://<dbuser>:<dbpassword>@ds159993.mlab.com:59993/mern-auth\par
+Replace <dbuser> and <dbpassword> with the database user credentials you just created.\par
+4. Drop your URI into the keys.js file in the config directory.\par
+module.exports = \{\par
+  mongoURI: "YOUR_MONGO_URI_HERE",\par
+  secretOrKey: "secret"\par
+\};\par
+IV. Get your Plaid API sandbox keys\par
+1. Head over to Plaid and sign up for an account\par
+2. Click \ldblquote Get API Keys\rdblquote  and grab your keys for the Sandbox Environment\par
+You\rquote ll need your PLAID_CLIENT_ID, PLAID_SECRET, and PLAID_PUBLIC_KEY.\par
+Keep in mind that the sandbox environment uses test credentials and account data to build out and test Plaid integrations. If you want to use real credentials and account data, you\rquote ll need to sign up for development keys (free, up to 100 live accounts) or pay for production keys. However, since getting development keys from Plaid is not an \ldblquote instant-access\rdblquote  process (you need to fill out an application of sorts), we\rquote ll move forward with the sandbox environment. The integration process won\rquote t change based on your environment.\par
+That\rquote s it for the setup. Let\rquote s start building.\par
+\par
+Backend\par
+1. Create our Accounts schema\par
+In the models directory, create a Account.js file.\par
+\f2\u10140?\f0   models touch Account.js\par
+Place the following in the Account.js file.\par
+const mongoose = require("mongoose");\par
+const Schema = mongoose.Schema;\par
+const AccountSchema = new Schema(\{\par
+  userId: \{\par
+    type: Schema.Types.ObjectId, \par
+    ref: "users"\par
+  \},\par
+  accessToken: \{\par
+    type: String,\par
+    required: true\par
+  \},\par
+  itemId: \{\par
+    type: String,\par
+    required: true\par
+  \},\par
+  institutionId: \{\par
+    type: String,\par
+    required: true\par
+  \},\par
+  institutionName: \{\par
+    type: String\par
+  \},\par
+  accountName: \{\par
+    type: String\par
+  \},\par
+  accountType: \{\par
+    type: String\par
+  \},\par
+  accountSubtype: \{\par
+    type: String\par
+  \}\par
+\});\par
+module.exports = Account = mongoose.model("account", AccountSchema);\par
+2. Create our Plaid API routes\par
+Initial Setup\par
+Let\rquote s create a plaid.js file in our api directory to hold all of our plaid-related routes.\par
+\f2\u10140?\f0   mern-plaid cd routes/api\par
+\f2\u10140?\f0   api touch plaid.js\par
+For initial setup, we are going to pull in all required packages, load our Account and User models, and initialize Plaid using our API keys. Place the following in plaid.js.\par
+const express = require("express");\par
+const plaid = require("plaid");\par
+const router = express.Router();\par
+const passport = require("passport");\par
+const moment = require("moment");\par
+const mongoose = require("mongoose");\par
+// Load Account and User models\par
+const Account = require("../../models/Account");\par
+const User = require("../../models/User");\par
+const PLAID_CLIENT_ID = "YOUR_CLIENT_ID";\par
+const PLAID_SECRET = "YOUR_SECRET";\par
+const PLAID_PUBLIC_KEY = "YOUR_PUBLIC_KEY";\par
+const client = new plaid.Client(\par
+  PLAID_CLIENT_ID,\par
+  PLAID_SECRET,\par
+  PLAID_PUBLIC_KEY,\par
+  plaid.environments.sandbox,\par
+  \{ version: "2018-05-22" \}\par
+);\par
+var PUBLIC_TOKEN = null;\par
+var ACCESS_TOKEN = null;\par
+var ITEM_ID = null;\par
+// Routes will go here\par
+module.exports = router;\par
+Before we define any routes, we need to make our server aware of the new path. Make the following two bolded additions to the server.js file in the root directory.\par
+const express = require("express");\par
+const mongoose = require("mongoose");\par
+const bodyParser = require("body-parser");\par
+const passport = require("passport");\par
+const users = require("./routes/api/users");\par
+const plaid = require("./routes/api/plaid");\par
+const app = express();\par
+// Bodyparser middleware\par
+app.use(\par
+  bodyParser.urlencoded(\{\par
+    extended: false\par
+  \})\par
+);\par
+app.use(bodyParser.json());\par
+// DB Config\par
+const db = require("./config/keys").mongoURI;\par
+// Connect to MongoDB\par
+mongoose\par
+  .connect(\par
+    db,\par
+    \{ useNewUrlParser: true \}\par
+  )\par
+  .then(() => console.log("MongoDB successfully connected"))\par
+  .catch(err => console.log(err));\par
+// Passport middleware\par
+app.use(passport.initialize());\par
+// Passport config\par
+require("./config/passport")(passport);\par
+// Routes\par
+app.use("/api/users", users);\par
+app.use("/api/plaid", plaid);\par
+const port = process.env.PORT || 5000;\par
+app.listen(port, () => console.log(`Server up and running on port $\{port\} !`));\par
+Let\rquote s head back to our plaid.js file and begin creating routes. If it\rquote s not clear already, all routes will be defined under the variable declarations and above the router export.\par
+Adding Accounts\par
+Our flow for adding accounts will go as follows.\par
+Parse PUBLIC_TOKEN and other data from request\par
+Exchange PUBLIC_TOKEN for an ACCESS_TOKEN; we don\rquote t need to save our PUBLIC_TOKEN in the database (expires after 30 minutes), but we will store the ACCESS_TOKEN so we can get transactions and other account-specific data\par
+Check if the account already exists for that specific user using userId and institutionId\par
+If the account doesn\rquote t already exist, save it to our database\par
+// @route POST api/plaid/accounts/add\par
+// @desc Trades public token for access token and stores credentials in database\par
+// @access Private\par
+router.post(\par
+  "/accounts/add",\par
+  passport.authenticate("jwt", \{ session: false \}),\par
+  (req, res) => \{\par
+    PUBLIC_TOKEN = req.body.public_token;\par
+const userId = req.user.id;\par
+const institution = req.body.metadata.institution;\par
+    const \{ name, institution_id \} = institution;\par
+if (PUBLIC_TOKEN) \{\par
+      client\par
+        .exchangePublicToken(PUBLIC_TOKEN)\par
+        .then(exchangeResponse => \{\par
+          ACCESS_TOKEN = exchangeResponse.access_token;\par
+          ITEM_ID = exchangeResponse.item_id;\par
+// Check if account already exists for specific user\par
+          Account.findOne(\{\par
+            userId: req.user.id,\par
+            institutionId: institution_id\par
+          \})\par
+            .then(account => \{\par
+              if (account) \{\par
+                console.log("Account already exists");\par
+              \} else \{\par
+                const newAccount = new Account(\{\par
+                  userId: userId,\par
+                  accessToken: ACCESS_TOKEN,\par
+                  itemId: ITEM_ID,\par
+                  institutionId: institution_id,\par
+                  institutionName: name\par
+                \});\par
+newAccount.save().then(account => res.json(account));\par
+              \}\par
+            \})\par
+            .catch(err => console.log(err)); // Mongo Error\par
+        \})\par
+        .catch(err => console.log(err)); // Plaid Error\par
+    \}\par
+  \}\par
+);\par
+Deleting Accounts\par
+Users may want to remove, or \ldblquote unlink\rdblquote , specific bank accounts. Place the following below the previous route in plaid.js.\par
+// @route DELETE api/plaid/accounts/:id\par
+// @desc Delete account with given id\par
+// @access Private\par
+router.delete(\par
+  "/accounts/:id",\par
+  passport.authenticate("jwt", \{ session: false \}),\par
+  (req, res) => \{\par
+    Account.findById(req.params.id).then(account => \{\par
+      // Delete account\par
+      account.remove().then(() => res.json(\{ success: true \}));\par
+    \});\par
+  \}\par
+Fetching All Accounts\par
+We want to be able to get all bank accounts that a specific user has linked so we can display them upon logging in.\par
+// @route GET api/plaid/accounts\par
+// @desc Get all accounts linked with plaid for a specific user\par
+// @access Private\par
+router.get(\par
+  "/accounts",\par
+  passport.authenticate("jwt", \{ session: false \}),\par
+  (req, res) => \{\par
+    Account.find(\{ userId: req.user.id \})\par
+      .then(accounts => res.json(accounts))\par
+      .catch(err => console.log(err));\par
+  \}\par
+);\par
+Fetching Transactions\par
+We\rquote ll want to fetch transactions for each account a user has linked.\par
+For each account a user has linked, use that account\rquote s ACCESS_TOKEN to getTransactions from the past 30 days\par
+Push object onto an array containing the institutionName and all transactions\par
+Keep in mind that Plaid\rquote s Sandbox environment contains identical mock test data for all Items that are created, regardless of the institution that is selected. In other words, each institution will have the same exact transaction data while in sandbox mode (this will be more apparent when we display the data in React).\par
+Place the following in plaid.js as our final route.\par
+// @route POST api/plaid/accounts/transactions\par
+// @desc Fetch transactions from past 30 days from all linked accounts\par
+// @access Private\par
+router.post(\par
+  "/accounts/transactions",\par
+  passport.authenticate("jwt", \{ session: false \}),\par
+  (req, res) => \{\par
+    const now = moment();\par
+    const today = now.format("YYYY-MM-DD");\par
+    const thirtyDaysAgo = now.subtract(30, "days").format("YYYY-MM-DD"); // Change this if you want more transactions\par
+let transactions = [];\par
+const accounts = req.body;\par
+if (accounts) \{\par
+      accounts.forEach(function(account) \{\par
+        ACCESS_TOKEN = account.accessToken;\par
+        const institutionName = account.institutionName;\par
+client\par
+          .getTransactions(ACCESS_TOKEN, thirtyDaysAgo, today)\par
+          .then(response => \{\par
+            transactions.push(\{\par
+              accountName: institutionName,\par
+              transactions: response.transactions\par
+            \});\par
+// Don't send back response till all transactions have been added\par
+if (transactions.length === accounts.length) \{\par
+              res.json(transactions);\par
+            \}\par
+          \})\par
+          .catch(err => console.log(err));\par
+      \});\par
+    \}\par
+  \}\par
+);\par
+Redux\par
+1. Defining our Types\par
+Make the following bolded additions to the types.js file in the actions client directory.\par
+export const GET_ERRORS = "GET_ERRORS";\par
+export const USER_LOADING = "USER_LOADING";\par
+export const SET_CURRENT_USER = "SET_CURRENT_USER";\par
+export const ADD_ACCOUNT = "ADD_ACCOUNT";\par
+export const DELETE_ACCOUNT = "DELETE_ACCOUNT";\par
+export const GET_ACCOUNTS = "GET_ACCOUNTS";\par
+export const ACCOUNTS_LOADING = "ACCOUNTS_LOADING";\par
+export const GET_TRANSACTIONS = "GET_TRANSACTIONS";\par
+export const TRANSACTIONS_LOADING = "TRANSACTIONS_LOADING";\par
+2. Redux Actions\par
+To keep this post as short and simple as possible, we won\rquote t have separate action/reducer files for accounts vs. transactions.\par
+Let\rquote s start by creating an accountActions.js file within the actions directory.\par
+\f2\u10140?\f0   actions touch accountActions.js\par
+Place the following at the top of accountActions.js.\par
+import axios from "axios";\par
+import \{\par
+  ADD_ACCOUNT,\par
+  DELETE_ACCOUNT,\par
+  GET_ACCOUNTS,\par
+  ACCOUNTS_LOADING,\par
+  GET_TRANSACTIONS,\par
+  TRANSACTIONS_LOADING\par
+\} from "./types";\par
+// Actions will go here\par
+Account Actions\par
+We\rquote ll have an action for addAccount, deleteAccount, and getAccounts.\par
+Our flow for adding accounts will go as follows.\par
+Parse accounts from request and send it to our /accounts/add endpoint\par
+Concatenate the new account to our current accounts array and call getTransactions on the new accounts array (we\rquote ll create getTransactions shortly)\par
+// Add account\par
+export const addAccount = plaidData => dispatch => \{\par
+  const accounts = plaidData.accounts;\par
+  axios\par
+    .post("/api/plaid/accounts/add", plaidData)\par
+    .then(res =>\par
+      dispatch(\{\par
+        type: ADD_ACCOUNT,\par
+        payload: res.data\par
+      \})\par
+    )\par
+    .then(data =>\par
+      accounts ? dispatch(getTransactions(accounts.concat(data.payload))) : null\par
+    )\par
+    .catch(err => console.log(err));\par
+\};\par
+Our flow for deleting accounts will be similar. We filter out the deleted account from the accounts array before calling getTransactions.\par
+// Delete account\par
+export const deleteAccount = plaidData => dispatch => \{\par
+  if (window.confirm("Are you sure you want to remove this account?")) \{\par
+    const id = plaidData.id;\par
+    const newAccounts = plaidData.accounts.filter(\par
+      account => account._id !== id\par
+    );\par
+    axios\par
+      .delete(`/api/plaid/accounts/$\{id\}`)\par
+      .then(res =>\par
+        dispatch(\{\par
+          type: DELETE_ACCOUNT,\par
+          payload: id\par
+        \})\par
+      )\par
+      .then(newAccounts ? dispatch(getTransactions(newAccounts)) : null)\par
+      .catch(err => console.log(err));\par
+  \}\par
+\};\par
+And finally, our getAccounts action.\par
+// Get all accounts for specific user\par
+export const getAccounts = () => dispatch => \{\par
+  dispatch(setAccountsLoading());\par
+  axios\par
+    .get("/api/plaid/accounts")\par
+    .then(res =>\par
+      dispatch(\{\par
+        type: GET_ACCOUNTS,\par
+        payload: res.data\par
+      \})\par
+    )\par
+    .catch(err =>\par
+      dispatch(\{\par
+        type: GET_ACCOUNTS,\par
+        payload: null\par
+      \})\par
+    );\par
+\};\par
+// Accounts loading\par
+export const setAccountsLoading = () => \{\par
+  return \{\par
+    type: ACCOUNTS_LOADING\par
+  \};\par
+\};\par
+Transaction Actions\par
+Our getTransactions action follows an identical flow to getAccounts.\par
+// Get Transactions\par
+export const getTransactions = plaidData => dispatch => \{\par
+  dispatch(setTransactionsLoading());\par
+  axios\par
+    .post("/api/plaid/accounts/transactions", plaidData)\par
+    .then(res =>\par
+      dispatch(\{\par
+        type: GET_TRANSACTIONS,\par
+        payload: res.data\par
+      \})\par
+    )\par
+    .catch(err =>\par
+      dispatch(\{\par
+        type: GET_TRANSACTIONS,\par
+        payload: null\par
+      \})\par
+    );\par
+\};\par
+// Transactions loading\par
+export const setTransactionsLoading = () => \{\par
+  return \{\par
+    type: TRANSACTIONS_LOADING\par
+  \};\par
+\};\par
+3. Redux Reducers\par
+Create an accountReducer.js file within the reducers directory.\par
+\f2\u10140?\f0   reducers touch accountReducer.js\par
+Broadly speaking, we\rquote ll do two things in this file.\par
+Define our initial state\par
+Define how our state will change based on which actions are called\par
+Place the following in the accountReducers.js file.\par
+import \{\par
+  ADD_ACCOUNT,\par
+  DELETE_ACCOUNT,\par
+  GET_ACCOUNTS,\par
+  ACCOUNTS_LOADING,\par
+  GET_TRANSACTIONS,\par
+  TRANSACTIONS_LOADING\par
+\} from "../actions/types";\par
+const initialState = \{\par
+  accounts: [],\par
+  transactions: [],\par
+  accountsLoading: false,\par
+  transactionsLoading: false\par
+\};\par
+export default function(state = initialState, action) \{\par
+  switch (action.type) \{\par
+    case ACCOUNTS_LOADING:\par
+      return \{\par
+        ...state,\par
+        accountsLoading: true\par
+      \};\par
+    case ADD_ACCOUNT:\par
+      return \{\par
+        ...state,\par
+        accounts: [action.payload, ...state.accounts]\par
+      \};\par
+    case DELETE_ACCOUNT:\par
+      return \{\par
+        ...state,\par
+        accounts: state.accounts.filter(\par
+          account => account._id !== action.payload\par
+        )\par
+      \};\par
+    case GET_ACCOUNTS:\par
+      return \{\par
+        ...state,\par
+        accounts: action.payload,\par
+        accountsLoading: false\par
+      \};\par
+    case TRANSACTIONS_LOADING:\par
+      return \{\par
+        ...state,\par
+        transactionsLoading: true\par
+      \};\par
+    case GET_TRANSACTIONS:\par
+      return \{\par
+        ...state,\par
+        transactions: action.payload,\par
+        transactionsLoading: false\par
+      \};\par
+    default:\par
+      return state;\par
+  \}\par
+\}\par
+Finally, make these bolded additions to the index.js file in the reducers directory.\par
+import \{ combineReducers \} from "redux";\par
+import authReducer from "./authReducer";\par
+import errorReducer from "./errorReducer";\par
+import accountReducer from "./accountReducer";\par
+export default combineReducers(\{\par
+  auth: authReducer,\par
+  errors: errorReducer,\par
+  plaid: accountReducer\par
+\});\par
+React Components\par
+1. Setup\par
+Let\rquote s create an Accounts.js file within the dashboard folder of the components directory. This component will display all linked accounts and transactions. We\rquote ll display this component in our Dashboard only if a user has at least one account linked.\par
+\f2\u10140?\f0   dashboard touch Accounts.js\par
+Also, add the following to App.css as well.\par
+.main-btn \{\par
+  width: 185px;\par
+  letter-spacing: 1.5px;\par
+  border-radius: 3px;\par
+  margin-top: 1rem;\par
+\}\par
+.btn:hover \{\par
+  opacity: 0.8;\par
+\}\par
+2. Dashboard Component\par
+In our component\rquote s componentDidMount() method, we\rquote ll call getAccounts() and choose what to display based on accountsLoading state and how many accounts a user has linked.\par
+Our PlaidLinkButton has a handleOnSuccess function that calls addAccount(). If a user links his or her first account successfully, we\rquote ll display the child component of Accounts and pass in the user and their accounts as props (<Accounts user=\{user\} accounts=\{accounts\} />;).\par
+Replace the current content of Dashboard.js with the following. Make sure to add in your PLAID_PUBLIC_KEY in the plaidLinkProps of the PlaidLinkButton.\par
+import React, \{ Component \} from "react";\par
+import PlaidLinkButton from "react-plaid-link-button";\par
+import PropTypes from "prop-types";\par
+import \{ connect \} from "react-redux";\par
+import \{ logoutUser \} from "../../actions/authActions";\par
+import \{ getAccounts, addAccount \} from "../../actions/accountActions";\par
+import Accounts from "./Accounts";\par
+class Dashboard extends Component \{\par
+  componentDidMount() \{\par
+    this.props.getAccounts();\par
+  \}\par
+// Logout\par
+  onLogoutClick = e => \{\par
+    e.preventDefault();\par
+    this.props.logoutUser();\par
+  \};\par
+// Add account\par
+  handleOnSuccess = (token, metadata) => \{\par
+    const plaidData = \{\par
+      public_token: token,\par
+      metadata: metadata\par
+    \};\par
+this.props.addAccount(plaidData);\par
+  \};\par
+render() \{\par
+    const \{ user \} = this.props.auth;\par
+    const \{ accounts, accountsLoading \} = this.props.plaid;\par
+let dashboardContent;\par
+if (accounts === null || accountsLoading) \{\par
+      dashboardContent = <p className="center-align">Loading...</p>;\par
+    \} else if (accounts.length > 0) \{\par
+      // User has accounts linked\par
+      dashboardContent = <Accounts user=\{user\} accounts=\{accounts\} />;\par
+    \} else \{\par
+      // User has no accounts linked\par
+      dashboardContent = (\par
+        <div className="row">\par
+          <div className="col s12 center-align">\par
+            <h4>\par
+              <b>Welcome,</b> \{user.name.split(" ")[0]\}\par
+            </h4>\par
+            <p className="flow-text grey-text text-darken-1">\par
+              To get started, link your first bank account below\par
+            </p>\par
+            <div>\par
+              <PlaidLinkButton\par
+                buttonProps=\{\{\par
+                  className:\par
+                    "btn btn-large waves-effect waves-light hoverable blue accent-3 main-btn"\par
+                \}\}\par
+                plaidLinkProps=\{\{\par
+                  clientName: "YOUR_APP_NAME",\par
+                  key: "YOUR_PLAID_PUBLIC_KEY",\par
+                  env: "sandbox",\par
+                  product: ["transactions"],\par
+                  onSuccess: this.handleOnSuccess\par
+                \}\}\par
+                onScriptLoad=\{() => this.setState(\{ loaded: true \})\}\par
+              >\par
+                Link Account\par
+              </PlaidLinkButton>\par
+            </div>\par
+            <button\par
+              onClick=\{this.onLogoutClick\}\par
+              className="btn btn-large waves-effect waves-light hoverable red accent-3 main-btn"\par
+            >\par
+              Logout\par
+            </button>\par
+          </div>\par
+        </div>\par
+      );\par
+    \}\par
+return <div className="container">\{dashboardContent\}</div>;\par
+  \}\par
+\}\par
+Dashboard.propTypes = \{\par
+  logoutUser: PropTypes.func.isRequired,\par
+  getAccounts: PropTypes.func.isRequired,\par
+  addAccount: PropTypes.func.isRequired,\par
+  auth: PropTypes.object.isRequired,\par
+  plaid: PropTypes.object.isRequired\par
+\};\par
+const mapStateToProps = state => (\{\par
+  auth: state.auth,\par
+  plaid: state.plaid\par
+\});\par
+export default connect(\par
+  mapStateToProps,\par
+  \{ logoutUser, getAccounts, addAccount \}\par
+)(Dashboard);\par
+3. Accounts Component\par
+As mentioned, this component will be displayed if a user has at least one account linked. When the component mounts, we call getTransactions using the accounts passed down as props from the parent component.\par
+Place the following in Accounts.js. Again, make sure to add in your PLAID_PUBLIC_KEY in the plaidLinkProps of the PlaidLinkButton.\par
+import React, \{ Component \} from "react";\par
+import PropTypes from "prop-types";\par
+import PlaidLinkButton from "react-plaid-link-button";\par
+import \{ connect \} from "react-redux";\par
+import \{\par
+  getTransactions,\par
+  addAccount,\par
+  deleteAccount\par
+\} from "../../actions/accountActions";\par
+import \{ logoutUser \} from "../../actions/authActions";\par
+import MaterialTable from "material-table"; // {{\field{\*\fldinst{HYPERLINK https://mbrn.github.io/material-table/#/ }}{\fldrslt{https://mbrn.github.io/material-table/#/\ul0\cf0}}}}\f0\fs22\par
+class Accounts extends Component \{\par
+  componentDidMount() \{\par
+    const \{ accounts \} = this.props;\par
+    this.props.getTransactions(accounts);\par
+  \}\par
+// Add account\par
+  handleOnSuccess = (token, metadata) => \{\par
+    const \{ accounts \} = this.props;\par
+    const plaidData = \{\par
+      public_token: token,\par
+      metadata: metadata,\par
+      accounts: accounts\par
+    \};\par
+this.props.addAccount(plaidData);\par
+  \};\par
+// Delete account\par
+  onDeleteClick = id => \{\par
+    const \{ accounts \} = this.props;\par
+    const accountData = \{\par
+      id: id,\par
+      accounts: accounts\par
+    \};\par
+    this.props.deleteAccount(accountData);\par
+  \};\par
+// Logout\par
+  onLogoutClick = e => \{\par
+    e.preventDefault();\par
+    this.props.logoutUser();\par
+  \};\par
+render() \{\par
+    const \{ user, accounts \} = this.props;\par
+    const \{ transactions, transactionsLoading \} = this.props.plaid;\par
+let accountItems = accounts.map(account => (\par
+      <li key=\{account._id\} style=\{\{ marginTop: "1rem" \}\}>\par
+        <button\par
+          style=\{\{ marginRight: "1rem" \}\}\par
+          onClick=\{this.onDeleteClick.bind(this, account._id)\}\par
+          className="btn btn-small btn-floating waves-effect waves-light hoverable red accent-3"\par
+        >\par
+          <i className="material-icons">delete</i>\par
+        </button>\par
+        <b>\{account.institutionName\}</b>\par
+      </li>\par
+    ));\par
+// Setting up data table\par
+    const transactionsColumns = [\par
+      \{ title: "Account", field: "account" \},\par
+      \{ title: "Date", field: "date", type: "date", defaultSort: "desc" \},\par
+      \{ title: "Name", field: "name" \},\par
+      \{ title: "Amount", field: "amount" \},\par
+      \{ title: "Category", field: "category" \}\par
+    ];\par
+let transactionsData = [];\par
+    transactions.forEach(function(account) \{\par
+      account.transactions.forEach(function(transaction) \{\par
+        transactionsData.push(\{\par
+          account: account.accountName,\par
+          date: transaction.date,\par
+          category: transaction.category[0],\par
+          name: transaction.name,\par
+          amount: transaction.amount\par
+        \});\par
+      \});\par
+    \});\par
+return (\par
+      <div className="row">\par
+        <div className="col s12">\par
+          <button\par
+            onClick=\{this.onLogoutClick\}\par
+            className="btn-flat waves-effect"\par
+          >\par
+            <i className="material-icons left">keyboard_backspace</i> Log Out\par
+          </button>\par
+          <h4>\par
+            <b>Welcome!</b>\par
+          </h4>\par
+          <p className="grey-text text-darken-1">\par
+            Hey there, \{user.name.split(" ")[0]\}\par
+          </p>\par
+          <h5>\par
+            <b>Linked Accounts</b>\par
+          </h5>\par
+          <p className="grey-text text-darken-1">\par
+            Add or remove your bank accounts below\par
+          </p>\par
+          <ul>\{accountItems\}</ul>\par
+          <PlaidLinkButton\par
+            buttonProps=\{\{\par
+              className:\par
+                "btn btn-large waves-effect waves-light hoverable blue accent-3 main-btn"\par
+            \}\}\par
+            plaidLinkProps=\{\{\par
+              clientName: "YOUR_APP_NAME",\par
+              key: "YOUR_PLAID_PUBLIC_KEY",\par
+              env: "sandbox",\par
+              product: ["transactions"],\par
+              onSuccess: this.handleOnSuccess\par
+            \}\}\par
+            onScriptLoad=\{() => this.setState(\{ loaded: true \})\}\par
+          >\par
+            Add Account\par
+          </PlaidLinkButton>\par
+          <hr style=\{\{ marginTop: "2rem", opacity: ".2" \}\} />\par
+          <h5>\par
+            <b>Transactions</b>\par
+          </h5>\par
+          \{transactionsLoading ? (\par
+            <p className="grey-text text-darken-1">Fetching transactions...</p>\par
+          ) : (\par
+            <>\par
+              <p className="grey-text text-darken-1">\par
+                You have <b>\{transactionsData.length\}</b> transactions from your\par
+                <b> \{accounts.length\}</b> linked\par
+                \{accounts.length > 1 ? (\par
+                  <span> accounts </span>\par
+                ) : (\par
+                  <span> account </span>\par
+                )\}\par
+                from the past 30 days\par
+              </p>\par
+              <MaterialTable\par
+                columns=\{transactionsColumns\}\par
+                data=\{transactionsData\}\par
+                title="Search Transactions"\par
+              />\par
+            </>\par
+          )\}\par
+        </div>\par
+      </div>\par
+    );\par
+  \}\par
+\}\par
+Accounts.propTypes = \{\par
+  logoutUser: PropTypes.func.isRequired,\par
+  getTransactions: PropTypes.func.isRequired,\par
+  addAccount: PropTypes.func.isRequired,\par
+  deleteAccount: PropTypes.func.isRequired,\par
+  accounts: PropTypes.array.isRequired,\par
+  plaid: PropTypes.object.isRequired,\par
+  user: PropTypes.object.isRequired\par
+\};\par
+const mapStateToProps = state => (\{\par
+  plaid: state.plaid\par
+\});\par
+export default connect(\par
+  mapStateToProps,\par
+  \{ logoutUser, getTransactions, addAccount, deleteAccount \}\par
+)(Accounts);\par
+Final Touches (optional)\par
+Let\rquote s make some final touches to our app. We\rquote ll add a spinner indicator for the loading state (e.g. when accounts are being loaded) and make some small touches to our landing page.\par
+First, download spinner.gif and credit_card.png from the repo here.\par
+Let\rquote s create a img directory in our src folder.\par
+\f2\u10140?\f0   src mkdir img\par
+Place the spinner.gif and credit_card.png in this folder.\par
+1. Spinner\par
+Create a Spinner.js file in the dashboard component folder.\par
+\f2\u10140?\f0   dashboard touch Spinner.js\par
+Place the following in Spinner.js.\par
+import React from "react";\par
+import spinner from "../../img/spinner.gif";\par
+export default () => \{\par
+  return (\par
+    <div>\par
+      <img\par
+        src=\{spinner\}\par
+        style=\{\{ width: "100px", margin: "auto", display: "block" \}\}\par
+        alt="Loading..."\par
+      />\par
+    </div>\par
+  );\par
+\};\par
+Now make the following bolded changes to Dashboard.js.\par
+import React, \{ Component \} from "react";\par
+import PlaidLinkButton from "react-plaid-link-button";\par
+import PropTypes from "prop-types";\par
+import \{ connect \} from "react-redux";\par
+import \{ logoutUser \} from "../../actions/authActions";\par
+import \{ getAccounts, addAccount \} from "../../actions/accountActions";\par
+import Accounts from "./Accounts";\par
+import Spinner from "./Spinner";\par
+class Dashboard extends Component \{\par
+  componentDidMount() \{\par
+    this.props.getAccounts();\par
+  \}\par
+// Logout\par
+  onLogoutClick = e => \{\par
+    e.preventDefault();\par
+    this.props.logoutUser();\par
+  \};\par
+// Add account\par
+  handleOnSuccess = (token, metadata) => \{\par
+    const plaidData = \{\par
+      public_token: token,\par
+      metadata: metadata\par
+    \};\par
+this.props.addAccount(plaidData);\par
+  \};\par
+render() \{\par
+    const \{ user \} = this.props.auth;\par
+    const \{ accounts, accountsLoading \} = this.props.plaid;\par
+let dashboardContent;\par
+if (accounts === null || accountsLoading) \{\par
+      dashboardContent = <Spinner />;\par
+    \} else if (accounts.length > 0) \{\par
+      // User has accounts linked\par
+      dashboardContent = <Accounts user=\{user\} accounts=\{accounts\} />;\par
+    \} else \{\par
+      // User has no accounts linked\par
+      dashboardContent = (\par
+        <div className="row">\par
+          <div className="col s12 center-align">\par
+            <h4>\par
+              <b>Welcome,</b> \{user.name.split(" ")[0]\}\par
+            </h4>\par
+            <p className="flow-text grey-text text-darken-1">\par
+              To get started, link your first bank account below\par
+            </p>\par
+            <div>\par
+              <PlaidLinkButton\par
+                buttonProps=\{\{\par
+                  className:\par
+                    "btn btn-large waves-effect waves-light hoverable blue accent-3 main-btn"\par
+                \}\}\par
+                plaidLinkProps=\{\{\par
+                  clientName: "YOUR_APP_NAME,\par
+                  key: "YOUR_PUBLIC_KEY",\par
+                  env: "sandbox",\par
+                  product: ["transactions"],\par
+                  onSuccess: this.handleOnSuccess\par
+                \}\}\par
+                onScriptLoad=\{() => this.setState(\{ loaded: true \})\}\par
+              >\par
+                Link Account\par
+              </PlaidLinkButton>\par
+            </div>\par
+            <button\par
+              onClick=\{this.onLogoutClick\}\par
+              className="btn btn-large waves-effect waves-light hoverable red accent-3 main-btn"\par
+            >\par
+              Logout\par
+            </button>\par
+          </div>\par
+        </div>\par
+      );\par
+    \}\par
+return <div className="container">\{dashboardContent\}</div>;\par
+  \}\par
+\}\par
+Dashboard.propTypes = \{\par
+  logoutUser: PropTypes.func.isRequired,\par
+  getAccounts: PropTypes.func.isRequired,\par
+  addAccount: PropTypes.func.isRequired,\par
+  auth: PropTypes.object.isRequired,\par
+  plaid: PropTypes.object.isRequired\par
+\};\par
+const mapStateToProps = state => (\{\par
+  auth: state.auth,\par
+  plaid: state.plaid\par
+\});\par
+export default connect(\par
+  mapStateToProps,\par
+  \{ logoutUser, getAccounts, addAccount \}\par
+)(Dashboard);\par
+2. Landing\par
+Replace what is in Landing.js with the following.\par
+import React, \{ Component \} from "react";\par
+import \{ connect \} from "react-redux";\par
+import \{ Link \} from "react-router-dom";\par
+import PropTypes from "prop-types";\par
+import credit_card from "../../img/credit_card.png";\par
+class Landing extends Component \{\par
+  componentDidMount() \{\par
+    // If logged in, should redirect them to dashboard\par
+    if (this.props.auth.isAuthenticated) \{\par
+      this.props.history.push("/dashboard");\par
+    \}\par
+  \}\par
+render() \{\par
+    return (\par
+      <div style=\{\{ height: "75vh" \}\} className="container valign-wrapper">\par
+        <div className="row">\par
+          <div className="col s12 center-align">\par
+            <img\par
+              src=\{credit_card\}\par
+              style=\{\{ width: "350px" \}\}\par
+              className="responsive-img credit-card"\par
+              alt="Undraw"\par
+            />\par
+            <h4 className="flow-text">\par
+              <b>Build</b> a personal banking web app with Plaid and the\{" "\}\par
+              <span style=\{\{ fontFamily: "monospace" \}\}>MERN</span> stack\par
+            </h4>\par
+            <br />\par
+            <div className="col s6">\par
+              <Link\par
+                to="/register"\par
+                style=\{\{\par
+                  width: "140px",\par
+                  borderRadius: "3px",\par
+                  letterSpacing: "1.5px"\par
+                \}\}\par
+                className="btn btn-large waves-effect waves-light hoverable blue accent-3"\par
+              >\par
+                Register\par
+              </Link>\par
+            </div>\par
+            <div className="col s6">\par
+              <Link\par
+                to="/login"\par
+                style=\{\{\par
+                  width: "140px",\par
+                  borderRadius: "3px",\par
+                  letterSpacing: "1.5px"\par
+                \}\}\par
+                className="btn btn-large btn-flat waves-effect white black-text"\par
+              >\par
+                Log In\par
+              </Link>\par
+            </div>\par
+          </div>\par
+        </div>\par
+      </div>\par
+    );\par
+  \}\par
+\}\par
+Landing.propTypes = \{\par
+  auth: PropTypes.object.isRequired\par
+\};\par
+const mapStateToProps = state => (\{\par
+  auth: state.auth\par
+\});\par
+export default connect(mapStateToProps)(Landing);\par
+As a nice touch, let\rquote s add the following animation to our App.css.\par
+.main-btn \{\par
+  width: 185px;\par
+  letter-spacing: 1.5px;\par
+  border-radius: 3px;\par
+  margin-top: 1rem;\par
+\}\par
+.btn:hover \{\par
+  opacity: 0.8;\par
+\}\par
+.credit-card \{\par
+  animation: float 3s ease-in-out infinite;\par
+\}\par
+@keyframes float \{\par
+  0% \{\par
+    transform: translatey(0px);\par
+  \}\par
+  50% \{\par
+    transform: translatey(-10px);\par
+  \}\par
+  100% \{\par
+    transform: translatey(0px);\par
+  \}\par
+\}\par
+3. Navbar + Title\par
+If you haven't already, change the Navbar.js component to display your app name.\par
+import React, \{ Component \} from "react";\par
+import \{ Link \} from "react-router-dom";\par
+class Navbar extends Component \{\par
+  render() \{\par
+    return (\par
+      <div className="navbar-fixed">\par
+        <nav className="z-depth-0">\par
+          <div className="nav-wrapper white">\par
+            <Link\par
+              to="/"\par
+              style=\{\{\par
+                fontFamily: "monospace"\par
+              \}\}\par
+              className="col s5 brand-logo center black-text"\par
+            >\par
+              YOUR APP NAME\par
+            </Link>\par
+          </div>\par
+        </nav>\par
+      </div>\par
+    );\par
+  \}\par
+\}\par
+export default Navbar;\par
+And just to cover all our bases, change the title tag in index.html of client/public.\par
+<title>Your App Name</title>\par
+That\rquote s a wrap! \f3\u-10179?\u-9137?\f0\par
+\par
+Hope you enjoyed following along! I really enjoyed my experience building with Plaid. They have taken a process that may otherwise be complex and created a simple, beautiful user experience and an easy-to-follow, intuitive developer experience.\par
+There are a lot of opportunities to build new financial technology apps and improve the way humans interact with and manage their money. Hopefully, this post gave you the foundation and inspiration to go create something great with Plaid.\par
+I\rquote m always looking to improve. If you have any feedback or questions, please drop a comment below!\lang9\par
+}
+ 
